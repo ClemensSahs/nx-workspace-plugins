@@ -12,7 +12,7 @@ import {
   updateProjectConfiguration,
 } from '@nrwl/devkit';
 import * as path from 'path';
-import {StrykerMutatorGeneratorSchema} from './schema';
+import { StrykerMutatorGeneratorSchema } from './schema';
 
 interface NormalizedSchema extends StrykerMutatorGeneratorSchema {
   projectName: string;
@@ -24,29 +24,26 @@ function normalizeOptions(
   tree: Tree,
   options: StrykerMutatorGeneratorSchema
 ): NormalizedSchema[] {
-
   const projects = getProjects(tree);
   const normalizedSchemas: NormalizedSchema[] = [];
 
-  options.names.split(',').forEach(projectName => {
-    let projectRoot = projects.get(projectName)?.root
-    const sourceRoot = projects.get(projectName)?.sourceRoot
+  options.names.split(',').forEach((projectName) => {
+    let projectRoot = projects.get(projectName)?.root;
+    const sourceRoot = projects.get(projectName)?.sourceRoot;
 
     if (!projectRoot) {
       if (!sourceRoot) {
         logger.error(`Could not generate files for project ${projectName}`);
       }
-      projectRoot = `${sourceRoot?.replace(new RegExp("/src$", ""), '')}`;
+      projectRoot = `${sourceRoot?.replace(new RegExp('/src$', ''), '')}`;
     }
-
 
     normalizedSchemas.push({
       ...options,
       projectName,
       projectRoot,
-      sourceRoot
+      sourceRoot,
     });
-
   });
 
   return normalizedSchemas;
@@ -77,17 +74,16 @@ function addFiles(tree: Tree, options: NormalizedSchema) {
 }
 
 function addMissingDependencies(tree: Tree, options: NormalizedSchema) {
-  const dependencies: Record<string, string> = {}
+  const dependencies: Record<string, string> = {};
 
   const devDependencies: Record<string, string> = {
-    "@stryker-mutator/core": "^6.3.0",
-    "@stryker-mutator/html-reporter": "^3.1.0",
-    "@stryker-mutator/jest-runner": "^6.3.0",
-  }
+    '@stryker-mutator/core': '^6.3.0',
+    '@stryker-mutator/html-reporter': '^3.1.0',
+    '@stryker-mutator/jest-runner': '^6.3.0',
+  };
 
-  return addDependenciesToPackageJson(tree, dependencies, devDependencies)
+  return addDependenciesToPackageJson(tree, dependencies, devDependencies);
 }
-
 
 export default async function (
   tree: Tree,
@@ -97,8 +93,11 @@ export default async function (
 
   const installTask = addMissingDependencies(tree, normalizedOptions[0]);
 
-  normalizedOptions.forEach(normalizedOption => {
-    const project = readProjectConfiguration(tree, normalizedOption.projectName)
+  normalizedOptions.forEach((normalizedOption) => {
+    const project = readProjectConfiguration(
+      tree,
+      normalizedOption.projectName
+    );
 
     updateProjectConfiguration(tree, normalizedOption.projectName, {
       ...project,
@@ -108,14 +107,13 @@ export default async function (
           executor: '@diogovcs/stryker-mutator:mutate',
           options: {
             strykerConfig: `${normalizedOption.projectRoot}/stryker.config.js`,
-
           },
         },
-      }
-    })
+      },
+    });
 
     addFiles(tree, normalizedOption);
-  })
+  });
 
   await formatFiles(tree);
 
