@@ -1,12 +1,70 @@
 import executor from './executor';
-import {ExecutorContext} from "@nrwl/devkit";
+import { loadStrykerConfig } from './helper';
+import { ExecutorContext } from '@nrwl/devkit';
+import { execSync, ExecSyncOptions } from 'child_process';
+import { transpileModule } from 'typescript';
+import exp = require('constants');
 
-const context: ExecutorContext = {} as ExecutorContext
+// mocks
+jest.mock('child_process', () => ({
+  execSync: jest.fn(),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  rmSync: jest.fn(),
+}));
+
+jest.mock('typescript', () => ({
+  transpileModule: jest.fn(),
+}));
+
+jest.mock('./helper', () => {
+  return {
+    loadStrykerConfig: jest.fn(),
+  };
+});
+
+const mockedExecSync = jest.mocked(execSync, true);
+const mockedTranspileModule = jest.mocked(transpileModule, true);
+const mockedLoadStrykerConfig = jest.mocked(loadStrykerConfig, true);
+
+const context: ExecutorContext = {
+  root: '',
+} as ExecutorContext;
 
 //FIXME: Fix and create more tests.
-describe.skip('Build Executor', () => {
+describe('Build Executor', () => {
   it('can run', async () => {
-    const output = await executor({mutate: "", incremental: true, strykerConfig: ""}, context);
-    expect(output.success).toBe(true);
+    const output = await executor(
+      { mutate: '', incremental: true, strykerConfig: '' },
+      context
+    );
+
+    mockedLoadStrykerConfig.mockImplementation(
+      async (strykerConfigPath: string) => {
+        expect(strykerConfigPath).toEqual('');
+        return {};
+      }
+    );
+
+    mockedExecSync.mockImplementation(
+      (command: string, options?: ExecSyncOptions): string => {
+        expect(options).toEqual({ stdio: [0, 1, 2] });
+
+        expect(command).toContain('stryker run');
+        expect(command).toContain('--incremental');
+        expect(command).not.toContain('--mutate');
+        return '';
+      }
+    );
+
+    expect(mockedTranspileModule).toHaveBeenCalled();
+    expect(mockedLoadStrykerConfig).toHaveBeenCalled();
+
+    expect(mockedExecSync).toHaveBeenCalled();
+    expect(output).toEqual({ success: true });
   });
 });
