@@ -4,6 +4,7 @@ import { ExecutorContext } from '@nrwl/devkit';
 import { execSync, ExecSyncOptions } from 'child_process';
 import { transpileModule } from 'typescript';
 import exp = require('constants');
+import { existsSync } from 'fs';
 
 // mocks
 jest.mock('child_process', () => ({
@@ -30,6 +31,8 @@ jest.mock('./helper', () => {
 const mockedExecSync = jest.mocked(execSync, true);
 const mockedTranspileModule = jest.mocked(transpileModule, true);
 const mockedLoadStrykerConfig = jest.mocked(loadStrykerConfig, true);
+
+const mockedExistsSync = jest.mocked(existsSync, true);
 
 const context: ExecutorContext = {
   root: '',
@@ -61,7 +64,12 @@ describe('Build Executor', () => {
       }
     );
 
-    expect(mockedTranspileModule).toHaveBeenCalled();
+    mockedExistsSync.mockImplementation((path: string) => {
+      return false;
+    });
+
+    expect(mockedTranspileModule).not.toHaveBeenCalled();
+
     expect(mockedLoadStrykerConfig).toHaveBeenCalled();
 
     expect(mockedExecSync).toHaveBeenCalled();
