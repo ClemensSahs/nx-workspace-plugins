@@ -61,7 +61,6 @@ describe('Build Executor', () => {
   } as ExecutorContext;
   const currentBaseDir = path.resolve(context.root);
 
-  console.log('currentBaseDir', currentBaseDir);
   beforeAll(() => {
     jest.clearAllMocks();
   });
@@ -90,12 +89,13 @@ describe('Build Executor', () => {
         name: 'with incremental, with mutate, with stryker config',
         incremental: true,
         mutate: './src/**/*.ts',
-        strykerConfig: 'stryker.conf.js',
+        // strykerConfig: '',
+        strykerConfig: './stryker.conf.js',
       },
       expected: {
         command: {
           containIncremental: true,
-          containMutate: false,
+          containMutate: true,
         },
         strykerConfigPath: `${currentBaseDir}/stryker.conf.js`,
         output: {
@@ -140,7 +140,7 @@ describe('Build Executor', () => {
       // Assert
       if (testMatrixItem.case.strykerConfig) {
         expect(receivedStrykerConfigPath).toEqual(
-          testMatrixItem.case.strykerConfig
+          testMatrixItem.expected.strykerConfigPath
         );
       }
 
