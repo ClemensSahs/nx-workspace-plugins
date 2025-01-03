@@ -2,9 +2,8 @@ import executor from './executor';
 import { loadStrykerConfig } from './helper';
 import { ExecutorContext } from '@nrwl/devkit';
 import { execSync, ExecSyncOptions } from 'child_process';
-import { transpileModule } from 'typescript';
-import exp = require('constants');
-import { existsSync } from 'fs';
+import { transpileModule, ModuleKind } from 'typescript';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path = require('path');
 
 // mocks
@@ -21,6 +20,9 @@ jest.mock('fs', () => ({
 
 jest.mock('typescript', () => ({
   transpileModule: jest.fn(),
+  ModuleKind: {
+    CommonJS: 1,
+  },
 }));
 
 jest.mock('./helper', () => {
@@ -29,11 +31,13 @@ jest.mock('./helper', () => {
   };
 });
 
-const mockedExecSync = jest.mocked(execSync, true);
 const mockedTranspileModule = jest.mocked(transpileModule, true);
+const mockedExecSync = jest.mocked(execSync, true);
 const mockedLoadStrykerConfig = jest.mocked(loadStrykerConfig, true);
 
 const mockedExistsSync = jest.mocked(existsSync, true);
+const mockedReadFileSync = jest.mocked(readFileSync, true);
+const mockedWriteFileSync = jest.mocked(writeFileSync, true);
 
 type TestMatrixItem = {
   case: {
@@ -61,8 +65,8 @@ describe('Build Executor', () => {
   } as ExecutorContext;
   const currentBaseDir = path.resolve(context.root);
 
-  beforeAll(() => {
-    jest.clearAllMocks();
+  beforeEach(() => {
+    jest.resetAllMocks();
   });
 
   const testMatrix: TestMatrixItem[] = [
@@ -163,6 +167,131 @@ describe('Build Executor', () => {
 
       expect(mockedExecSync).toHaveBeenCalled();
       expect(output).toEqual(testMatrixItem.expected.output);
+    });
+  });
+
+  it('can handle jest config in stryker config', async () => {
+    // Arrange
+    const strykerConfig = {
+      jest: {
+        configFile: './jest.config.ts',
+      },
+    };
+
+    mockedLoadStrykerConfig.mockImplementationOnce(async () => {
+      return strykerConfig;
+    });
+
+    mockedExistsSync.mockReset();
+    mockedExistsSync.mockImplementation((path: string) => {
+      return true;
+    });
+
+    const returnCode = `
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {}
+    `;
+
+    mockedReadFileSync.mockImplementation((path: string) => {
+      return Buffer.from(returnCode);
+    });
+
+    mockedTranspileModule.mockReset();
+    let receivedTranspileModuleCode;
+    mockedTranspileModule.mockImplementation((input: string) => {
+      console.log('transpileModule', input);
+      receivedTranspileModuleCode = input;
+      return {
+        outputText: returnCode,
+      };
+    });
+
+    let receivedWriteFileSyncPath;
+    let receivedWriteFileSyncData;
+    mockedWriteFileSync.mockImplementation((path: string, data: string) => {
+      receivedWriteFileSyncPath = path;
+      receivedWriteFileSyncData = data;
+      return;
+    });
+
+    mockedTranspileModule.mockImplementation((code: string) => {
+      return {
+        outputText: code,
+      };
+    });
+
+    // Act
+    const output = await executor(
+      {
+        mutate: '',
+        incremental: false,
+        strykerConfig: './stryker.conf.js',
+      },
+      context
+    );
+
+    // Assert
+
+    expect(mockedExistsSync).toHaveBeenCalled();
+    expect(mockedExistsSync).toHaveBeenCalledWith(
+      `${currentBaseDir}/jest.config.ts`
+    );
+
+    expect(mockedTranspileModule).toHaveBeenCalled();
+    expect(mockedTranspileModule).toHaveBeenCalledWith(returnCode, {
+      compilerOptions: {
+        module: ModuleKind.CommonJS,
+      },
+    });
+
+    expect(mockedWriteFileSync).toHaveBeenCalled();
+    expect(receivedWriteFileSyncPath).toEqual(
+      `${currentBaseDir}/jest.config.js`
+    );
+    expect(receivedWriteFileSyncData).not.toContain('Object.defineProperty');
+    expect(receivedWriteFileSyncData).not.toContain('"use strict";');
+    expect(receivedWriteFileSyncData).not.toContain('exports.default');
+    expect(receivedWriteFileSyncData).toContain('module.exports');
+  });
+
+  it('can handle a error on execSync', async () => {
+    // Arrange
+    mockedLoadStrykerConfig.mockImplementationOnce(async () => {
+      return {
+        jest: {
+          configFile: './jest.config.ts',
+        },
+      };
+    });
+    mockedExistsSync.mockImplementation((path: string) => {
+      return true;
+    });
+    mockedReadFileSync.mockImplementation((path: string) => {
+      return Buffer.from('');
+    });
+    mockedTranspileModule.mockImplementation((code: string) => {
+      return {
+        outputText: code,
+      };
+    });
+    mockedExecSync.mockImplementationOnce(() => {
+      throw new Error('error');
+    });
+
+    // Act
+    const output = await executor(
+      {
+        mutate: '',
+        incremental: false,
+        strykerConfig: './stryker.conf.js',
+      },
+      context
+    );
+
+    // Assert
+    expect(output).toEqual({
+      success: false,
     });
   });
 });
